@@ -1587,6 +1587,15 @@ impl Connection {
         debug_assert!(self.side.is_server());
         let len = packet.header_data.len() + packet.payload.len();
         self.path.total_recvd = len as u64;
+        match self.state {
+            State::Handshake(ref mut state) => match packet.header {
+                Header::Initial { ref token, .. } => {
+                    state.token = Some(token.clone());
+                }
+                _ => unreachable!("first packet must be an Initial packet"),
+            },
+            _ => unreachable!("first packet must be delivered in Handshake state"),
+        }
 
         self.on_packet_authenticated(
             now,
@@ -2157,8 +2166,15 @@ impl Connection {
                 Ok(())
             }
             Header::Initial {
-                src_cid: rem_cid, ..
+                src_cid: rem_cid,
+                ref token,
+                ..
             } => {
+                if self.side.is_server() && Some(token) != state.token.as_ref() {
+                    // Clients must send the same retry token in every Initial
+                    return Err(TransportError::INVALID_TOKEN("").into());
+                }
+
                 if !state.rem_cid_set {
                     trace!("switching remote CID to {}", rem_cid);
                     let mut state = state.clone();
@@ -3206,8 +3222,6 @@ mod state {
         /// Always set for servers
         pub rem_cid_set: bool,
         /// Stateless retry token, if the peer has provided one
-        ///
-        /// Only set for clients
         pub token: Option<Bytes>,
         /// First cryptographic message
         ///
