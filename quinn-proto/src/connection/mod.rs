@@ -243,7 +243,7 @@ impl Connection {
         };
         let state = State::Handshake(state::Handshake {
             rem_cid_set: side.is_server(),
-            token: None,
+            token: Bytes::new(),
             client_hello: None,
         });
         let mut rng = StdRng::from_entropy();
@@ -1590,7 +1590,7 @@ impl Connection {
         match self.state {
             State::Handshake(ref mut state) => match packet.header {
                 Header::Initial { ref token, .. } => {
-                    state.token = Some(token.clone());
+                    state.token = token.clone();
                 }
                 _ => unreachable!("first packet must be an Initial packet"),
             },
@@ -2081,7 +2081,7 @@ impl Connection {
 
                 let token_len = packet.payload.len() - 16;
                 self.state = State::Handshake(state::Handshake {
-                    token: Some(packet.payload.freeze().split_to(token_len)),
+                    token: packet.payload.freeze().split_to(token_len),
                     rem_cid_set: false,
                     client_hello: None,
                 });
@@ -2110,7 +2110,7 @@ impl Connection {
                 if self.crypto.is_handshaking() {
                     trace!("handshake ongoing");
                     self.state = State::Handshake(state::Handshake {
-                        token: None,
+                        token: Bytes::new(),
                         ..state
                     });
                     return Ok(());
@@ -2170,7 +2170,7 @@ impl Connection {
                 ref token,
                 ..
             } => {
-                if self.side.is_server() && Some(token) != state.token.as_ref() {
+                if self.side.is_server() && *token != state.token {
                     // Clients must send the same retry token in every Initial
                     return Err(TransportError::INVALID_TOKEN("").into());
                 }
@@ -3221,8 +3221,8 @@ mod state {
         ///
         /// Always set for servers
         pub rem_cid_set: bool,
-        /// Stateless retry token, if the peer has provided one
-        pub token: Option<Bytes>,
+        /// Stateless retry token received in the first Initial
+        pub token: Bytes,
         /// First cryptographic message
         ///
         /// Only set for clients
