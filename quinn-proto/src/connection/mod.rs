@@ -2171,8 +2171,10 @@ impl Connection {
                 ..
             } => {
                 if self.side.is_server() && *token != state.expected_token {
-                    // Clients must send the same retry token in every Initial
-                    return Err(TransportError::INVALID_TOKEN("").into());
+                    // Initial packets can be spoofed, so we discard rather than killing the
+                    // connection.
+                    warn!("discarding packet with invalid retry token");
+                    return Ok(());
                 }
 
                 if !state.rem_cid_set {
